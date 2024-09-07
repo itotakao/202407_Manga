@@ -1,0 +1,195 @@
+Document
+
+1.設計思想
+- 当アセットは複数シーンでの起動で設計しています。
+Mainシーンと任意シーンの２つシーンを読み込みます。
+（シーン構造については後記）
+- メイン処理はステートで管理しています。
+各シーンにManagerクラスを個別につくるのではなく各シーンにBaseStateから継承したステートを作成してメイン処理を記載する形にしています。
+ステートでは
+・初期化
+・メイン処理アップデート
+・シーン読み込み
+・DIコンテナの呼び出し
+を行います。
+（ステートの詳しい編集方法については後記）
+- シーン読み込みについて
+「StageLoader.cs」からシーン読み込み関連を呼び出す形で統一しています。
+また、シーン切り替えはステートから行います。
+（シーン遷移方法については後記）
+- DIコンテナでアセット管理
+任意シーンには自前で作成したAssetsFacadeがあります。
+各アセットを疎結合にしたいのが採用意図です。
+（AssetsFacadeの使用方法については後記）
+- 固有値用のパラメーター管理について
+２種類の管理窓を用意しています。
+・GlobalParameter
+変数をpublic staticで管理しています。内容が不変な固定パラメーターを記載する用途で使用します。
+追加/編集には「GlobalParameter.cs」に直接記載します。
+記載した内容はEditorから「Util/GlobalParameterWindow」でウィンドを開くことでも確認できます。
+・DebugParameter
+変数をScriptableObjectで管理しています。内容を変更してデバッグをしたい項目を記載する用途で使用します。
+追加は「DebugSettings.cs」に直接記載してください。Classはpartial属性なのでスクリプトフォルダごとに「〇〇Settings.cs」をつくると管理しやすいです。
+例：UIフォルダなら「UISettings.cs」Cameraフォルダなら「CameraSettings.cs」
+編集はEditorのProjectエリアから「Create/Util/DebugParameter/CreateTable」を押下してScriptableObjectを作成して、作成したObjectから編集できます。
+使用するには「Mainシーン」のオブジェクトに「DebugParameter.cs」をアタッチして使用したいScriptableObjectをアタッチしてください。
+- 音声管理について
+「AudioManager.cs」で行っています。
+音声ファイルをEditorのProjectエリア「Assets/_Application/Resources/」下に配置すると起動時に自動でファイルを読み込みます。
+使用する場合はAudioManagerから呼び出します。
+（詳しい呼び出し方については後記）
+-  スクリプト感の呼び出しについて
+シングルトンで呼び出しています。シングルトンの名前は「Current」で統一しています。
+
+2.必須外部アセット
+- TextMeshPro
+
+3.シーン構造の詳細
+複数シーン（Mainと任意の2つ）で管理します。
+- Mainシーン
+全てのシーンに必ず存在します。
+・MainCamera
+カメラ以下にはFadeManagerがあります。Fadeの色を変えたい場合はFadeManagerから調整してください。
+呼び出し関連は「StageLoader.cs」で行っているので特に追加で呼び出す必要はないです。
+・System/GameState
+ステートの初期化/呼び出しを行っています。
+・System/StageLoader
+シーン読み込みを行います。
+・DebugParameter
+デバッグ用のパラメーターをScriptableObjectから参照して管理します。
+ScriptableObjectを変更することで値を簡単に変更できます。
+・System/AuduoManager
+音声ファイルを簡単に管理するためのマネージャーです。
+起動時にResourcesフォルダから音声ファイルをキャッシュするのでPlay()関数だけで鳴らせます。
+- 任意シーン
+シーンごと個別に存在します。
+・AssetsFacade
+DIコンテナです。アセットはAssetsFacade下にツリーになるよう配置していってください。
+呼び出しはステートから行います。
+
+4.ステートについて
+ステートファイルはEditorのProjectエリア「Assets/_Application/Scripts/GameState」下に配置します。
+ステートのテンプレートから記載して編集していきます。
+```
+using System.Collections;
+using UnityEngine;
+using _Util.GameState;
+
+namespace _Application
+{
+    public class TemplateState : BaseState
+    {
+        public TemplateState(StateMachine stateMachine) : base(stateMachine)
+        {
+            TransitionFunctions.Add(new TransitionFunction(Transition));
+        }
+
+        private BaseState Transition()
+        {
+            return (IsLoad ? LoadState(LoadStageId, StateMachine) : null);
+        }
+
+        public override void OnStateEnter()
+        {
+            base.OnStateEnter();
+
+            StageLoader.LoadStage(StageId.None);
+
+            StartCoroutine(CoStateEnter());
+        }
+
+        private IEnumerator CoStateEnter()
+        {
+            yield return new WaitUntil(() => StageLoader.IsLoadComplete);
+
+            yield return new WaitUntil(() => false);
+
+            LoadStage(StageId.None);
+        }
+
+        public override void OnStateUpdate()
+        {
+            base.OnStateUpdate();
+
+
+        }
+
+        public override void OnStateFixedUpdate()
+        {
+            base.OnStateFixedUpdate();
+
+
+        }
+
+        public override void OnStateLateUpdate()
+        {
+            base.OnStateLateUpdate();
+
+
+        }
+
+        public override void OnStateExit()
+        {
+            base.OnStateExit();
+
+
+        }
+    }
+}
+```
+記載するところ
+・「CoStateEnter()」メソッドの最後「LoadStage(StageId.None);」でシーン遷移を行います。
+・「OnStateUpdate（）」,「OnStateFixedUpdate()」,OnStateLateUpdate()」,「OnStateExit()」は通常のUnityメソッドと同じ挙動だと思ってもらって大丈夫です。
+- ステートの追加方法
+(1)Sceneファイルを作成
+(2)EditorのBuildSettingsに作成したSceneファイルを追加
+(3)「StageId.cs」のEnumにStageIdを追加
+(4)ステートファイルを作成(****State.cs)
+(5)「BaseState.cs」のメソット「LoadState()」に追加したStageIdとステートを追加
+- 初回起動のステート設定方法
+「BaseState.cs」のメソッド「LoadState()」内の「StageId.None => new ****State(this)」を変更します。
+また、DebugParameterのScriptableObjectで設定する「UseDebugSkipScene」を変更することでも初回起動シーンを変更できます（用途としてはデバッグ用なので基本はStageId.Noneの読み込み先を変更）。
+- IAssetsFacade***について
+DIコンテナの呼び出しを行っています。
+
+5.シーン読み込みについて
+ステート内からメソッド「LoadStage(StageId.****)」を呼び出します。
+基本はメソッド「CoStateEnter()」最後に「LoadStage(StageId.****);」を記述してシーン遷移を行います。
+
+6.DIコンテナ(AssetsFacade)について
+インターフェースを継承したアセットをAssetsFacadeオブジェクト下にツリーで配置することで結合を行います。
+結合タイミングはEditorを更新したタイミングで自動的に監視して行いますがAssetsFacadeオブジェクトをInspectorから「SetComponets」ボタン押下でも行えます。
+継承に使用するインターフェース
+・IAssetsFacadeSetup(Awakeメソッドに相当)
+・IAssetsFacadeUpdate
+・IAssetsFacadeLateUpdate
+・IAssetsFacadeFixedUpdate
+・IAssetsFacadeExit
+またUtilityEvents枠を用意しており自由にインターフェースを追加する機能もあります。
+例：OnScanイベントを追加したい場合
+(1)AssetsFacadeオブジェクトをInspectorからtilityEventsリストを増やしNameに「OnScan」を追加
+(2)インターフェース「IAssetsFacadeOnScan.cs」を追加
+(3)設定したいオブジェクトにIAssetsFacadeOnScanを継承
+(4)設定したオブジェクトをHierarchy上に配置
+
+7.音声の呼び出し方
+(1)フィールドにシングルトン参照用の「private AudioManager AudioManager => AudioManager.Current」記載
+(2)音声呼び出しメソッドを呼び出し
+・例：同期のBGM呼び出し
+AudioManager.BGM.Play("ClipName")；
+・例：非同期のSE呼び出し
+yield return StartCoroutine(AudioManager.SE.PlayAsync("ClipName", Vector3.zero))；
+※各項目が再生中かどうか判別も行えます
+・例：SEが再生中かどうか
+AudioManager.SE.IsPlaying
+
+8.デバッグ機能
+EditorのUtilメニューにあります。
+- GlobalParameterWindow
+GlobalParamete.csに記載した固定パラメーター変数群を確認できます。
+- SceneUnit
+シーンの読み込みを管理します。
+読み込みボタンを押したら設定したシーンを読み込む他、チェックを入れることで読み込むシーンを保存して簡単に呼び出せるようにできます。
+他にも
+- GlobbalParameterのScriptableObjectをInspectorから見る
+UseDebugSkipSceneの項目を変更すると初回起動のシーンを変更できます。
