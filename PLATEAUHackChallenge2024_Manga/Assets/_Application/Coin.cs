@@ -6,7 +6,7 @@ using UnityEngine;
 
 public class Coin : MonoBehaviour
 {
-    const int MaxGetCount = 1;
+    const int MaxGetCount = 3;
 
     static int GetCointCount = 0;
 
